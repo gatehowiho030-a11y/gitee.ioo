@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文档自动分类管理器.</title>
+    <title>文档自动分类管理器·纯净无AI版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.12/pdf.min.js"></script>
@@ -34,6 +34,8 @@
             .scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
             .scrollbar-thin::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 3px; }
             .scrollbar-thin::-webkit-scrollbar-track { background: #10101b; }
+            .music-item { @apply flex items-center justify-between py-1.5 px-2 rounded hover:bg-dark/50 text-sm transition-all; }
+            .music-active { @apply bg-primary/20 border-l-2 border-cyber; }
         }
         * { scroll-behavior: auto !important; }
     </style>
@@ -47,8 +49,20 @@
     </div>
 </div>
 
+<!-- 音乐列表抽屉 -->
+<div id="musicPanel" class="fixed right-0 top-0 bottom-0 w-64 bg-darker border-l border-gray-700 z-40 transform translate-x-full transition-transform duration-300 overflow-y-auto scrollbar-thin">
+    <div class="p-3 border-b border-gray-700 sticky top-0 bg-darker">
+        <div class="flex items-center justify-between">
+            <h3 class="font-bold text-sm">BGM播放列表</h3>
+            <button onclick="toggleMusicPanel()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+    <div id="musicList" class="p-2 space-y-1"></div>
+</div>
+<div id="mask" class="fixed inset-0 bg-black/40 z-30 hidden" onclick="toggleMusicPanel()"></div>
+
 <!-- 顶部导航 -->
-<header class="sticky top-0 z-40 bg-darker px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+<header class="sticky top-0 z-20 bg-darker px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm">
     <div class="flex items-center gap-2">
         <i class="fa-solid fa-folder-open text-primary text-xl"></i>
         <h1 class="text-lg font-bold">文档管理器</h1>
@@ -58,6 +72,9 @@
         <input type="file" id="bgMusicUpload" accept="audio/*" multiple class="hidden">
         <button onclick="document.getElementById('bgMusicUpload').click()" class="px-2 py-1 bg-primary rounded btn-glow text-xs">
             <i class="fa-solid fa-music mr-1"></i>传BGM
+        </button>
+        <button onclick="toggleMusicPanel()" class="px-2 py-1 bg-cyber text-dark rounded btn-glow text-xs">
+            <i class="fa-solid fa-list mr-1"></i>列表
         </button>
         <div class="flex items-center gap-1">
             <button id="musicPrevBtn" disabled class="p-1.5 hover:text-primary text-sm"><i class="fa-solid fa-backward"></i></button>
@@ -74,8 +91,11 @@
     <div class="flex flex-wrap gap-2 mb-3">
         <input type="file" id="fileUpload" multiple class="hidden">
         <button onclick="document.getElementById('fileUpload').click()" class="px-3 py-1.5 bg-primary rounded btn-glow flex items-center gap-1 text-sm">
-            <i class="fa-solid fa-upload"></i>上传
+            <i class="fa-solid fa-upload"></i>选择文件
         </button>
+        <button id="selectAllFileBtn" class="px-3 py-1.5 bg-blue-600 rounded btn-glow text-sm">一键全选文档</button>
+        <button id="uploadSelectedBtn" disabled class="px-3 py-1.5 bg-secondary rounded btn-glow text-sm">一键上传选中</button>
+        
         <button id="selectAllBtn" class="px-3 py-1.5 bg-blue-600 rounded btn-glow text-sm">全选/反选</button>
         <button id="batchDelBtn" disabled class="px-3 py-1.5 bg-red-600 rounded btn-glow text-sm">批量删除</button>
         <button id="batchRestoreBtn" disabled class="px-3 py-1.5 bg-green-600 rounded btn-glow text-sm hidden">批量恢复</button>
@@ -85,25 +105,12 @@
         </button>
     </div>
 
-    <!-- 搜索区 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+    <!-- 本地搜索 -->
+    <div class="mb-4">
         <div class="flex gap-2">
             <input id="localSearch" placeholder="本地文件名搜索..." class="flex-1 px-2 py-1.5 bg-darker rounded border border-gray-700 outline-none focus:border-primary text-sm">
             <button id="searchLocalBtn" class="px-3 py-1.5 bg-secondary rounded btn-glow text-sm"><i class="fa-solid fa-search"></i></button>
         </div>
-        <div class="flex gap-2">
-            <input id="aiSearch" placeholder="AI智能搜索/问答..." class="flex-1 px-2 py-1.5 bg-darker rounded border border-gray-700 outline-none focus:border-primary text-sm">
-            <button id="aiSearchBtn" class="px-3 py-1.5 bg-cyber text-dark font-bold rounded btn-glow text-sm">AI搜索</button>
-        </div>
-    </div>
-
-    <!-- AI结果区 -->
-    <div id="aiResult" class="mb-4 p-3 bg-darker rounded-lg hidden border border-gray-700 text-sm">
-        <div class="flex justify-between mb-2">
-            <h3 class="font-semibold text-cyber">AI结果</h3>
-            <button onclick="document.getElementById('aiResult').classList.add('hidden')" class="hover:text-red-400"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div id="aiContent" class="whitespace-pre-line"></div>
     </div>
 
     <!-- 分类排序 -->
@@ -138,10 +145,6 @@
 const FILE_KEY = 'doc_files_v2';
 const RECYCLE_KEY = 'doc_recycle_v2';
 const MUSIC_KEY = 'doc_bgm_v2';
-// 通义千问API配置
-const AI_URL = 'https://bailian.console.aliyun.com/cn-beijing/?spm=a2c4g.11186623.0.0.782270afqlDEXz&tab=model#/efm/model_experience_center/text';
-// 在此填入你获取的API Key
-const AI_KEY = 'sk-50efe641ed0a49ac9f3f5052e721c319';
 
 // 全局状态
 let fileList = JSON.parse(localStorage.getItem(FILE_KEY)) || [];
@@ -149,6 +152,9 @@ let recycleList = JSON.parse(localStorage.getItem(RECYCLE_KEY)) || [];
 let bgmList = JSON.parse(localStorage.getItem(MUSIC_KEY)) || [];
 let isRecycle = false;
 let selectedIds = [];
+// 待上传文件缓存
+let pendingFiles = [];
+// 音乐相关
 let currentAudio = null;
 let currentTrack = 0;
 let loopMode = 'list';
@@ -186,6 +192,61 @@ const getIcon = ext => ({doc:'fa-file-lines', img:'fa-file-image', video:'fa-fil
 const formatSize = b => b<1024?`${b}B`:b<1024**2?`${(b/1024).toFixed(1)}KB`:`${(b/1024**2).toFixed(1)}MB`;
 const uuid = () => Date.now().toString(36);
 
+// ============== 音乐列表面板控制 ==============
+const toggleMusicPanel = () => {
+    const panel = document.getElementById('musicPanel');
+    const mask = document.getElementById('mask');
+    panel.classList.toggle('translate-x-full');
+    mask.classList.toggle('hidden');
+    renderMusicList();
+};
+
+// 渲染音乐播放列表
+const renderMusicList = () => {
+    const container = document.getElementById('musicList');
+    if(bgmList.length === 0){
+        container.innerHTML = '<p class="text-gray-500 text-center text-xs py-4">暂无BGM，点击上传</p>';
+        return;
+    }
+    let html = '';
+    bgmList.forEach((item, index) => {
+        const active = index === currentTrack ? 'music-active' : '';
+        html += `
+        <div class="music-item ${active}">
+            <div class="flex items-center gap-2 truncate flex-1" onclick="playMusicByIndex(${index})">
+                <i class="fa-solid ${index === currentTrack ? 'fa-volume-high text-cyber' : 'fa-music'} text-xs"></i>
+                <span class="truncate text-xs">${item.name}</span>
+            </div>
+            <button onclick="delMusic(${index})" class="text-gray-400 hover:text-red-400 p-1">
+                <i class="fa-solid fa-trash text-xs"></i>
+            </button>
+        </div>`;
+    });
+    container.innerHTML = html;
+};
+
+// 删除音乐
+const delMusic = (index) => {
+    if(currentTrack === index){
+        if(currentAudio) currentAudio.pause();
+        currentAudio = null;
+    }
+    bgmList.splice(index, 1);
+    if(currentTrack > index) currentTrack--;
+    saveToLocal();
+    renderMusicList();
+    updateMusicBtnState();
+};
+
+// 指定索引播放音乐
+const playMusicByIndex = (index) => {
+    currentTrack = index;
+    loadTrack(currentTrack);
+    currentAudio.play();
+    document.getElementById('musicCtrlBtn').innerHTML = '<i class="fa-solid fa-pause"></i>';
+    renderMusicList();
+};
+
 // ============== 背景音乐完整控制 ==============
 const initMusic = () => {
     const u = document.getElementById('bgMusicUpload');
@@ -195,7 +256,7 @@ const initMusic = () => {
     const loop = document.getElementById('loopBtn');
     const vol = document.getElementById('musicVolume');
 
-    const updateBtnState = () => {
+    const updateMusicBtnState = () => {
         const dis = bgmList.length === 0;
         prev.disabled = dis; ctrl.disabled = dis; next.disabled = dis;
     };
@@ -205,7 +266,9 @@ const initMusic = () => {
             const url = URL.createObjectURL(f);
             bgmList.push({id:uuid(), name:f.name, url:url});
         });
-        saveToLocal(); updateBtnState();
+        saveToLocal();
+        updateMusicBtnState();
+        renderMusicList();
     };
 
     const loadTrack = (index) => {
@@ -218,8 +281,10 @@ const initMusic = () => {
         currentAudio.onended = () => {
             if(loopMode === 'one') loadTrack(currentTrack);
             else loadTrack((currentTrack+1) % bgmList.length);
+            renderMusicList();
         };
         ctrl.innerHTML = '<i class="fa-solid fa-play"></i>';
+        renderMusicList();
     };
 
     const togglePlay = () => {
@@ -228,8 +293,14 @@ const initMusic = () => {
                             : (currentAudio.pause(), ctrl.innerHTML = '<i class="fa-solid fa-play"></i>');
     };
 
-    prev.onclick = () => { loadTrack(currentTrack - 1 < 0 ? bgmList.length-1 : currentTrack -1); currentAudio.play(); ctrl.innerHTML = '<i class="fa-solid fa-pause"></i>'; };
-    next.onclick = () => { loadTrack((currentTrack+1) % bgmList.length); currentAudio.play(); ctrl.innerHTML = '<i class="fa-solid fa-pause"></i>'; };
+    prev.onclick = () => { 
+        loadTrack(currentTrack - 1 < 0 ? bgmList.length-1 : currentTrack -1); 
+        currentAudio.play(); ctrl.innerHTML = '<i class="fa-solid fa-pause"></i>'; 
+    };
+    next.onclick = () => { 
+        loadTrack((currentTrack+1) % bgmList.length); 
+        currentAudio.play(); ctrl.innerHTML = '<i class="fa-solid fa-pause"></i>'; 
+    };
     ctrl.onclick = togglePlay;
     vol.oninput = () => { if(currentAudio) currentAudio.volume = vol.value/100; };
 
@@ -237,7 +308,7 @@ const initMusic = () => {
         loopMode = loopMode === 'list' ? 'one' : 'list';
         loop.classList.toggle('text-cyber'); loop.classList.toggle('text-gray-400');
     };
-    updateBtnState();
+    updateMusicBtnState();
 };
 
 // ============== 列表筛选与渲染 ==============
@@ -293,22 +364,55 @@ const updateSelected = () => {
 
 const updateBatchBtns = () => {
     const hasSelected = selectedIds.length > 0;
+    // 文档操作按钮
     document.getElementById('batchDelBtn').disabled = !hasSelected || isRecycle;
-    // 修复批量按钮显隐逻辑
     document.getElementById('batchRestoreBtn').classList.toggle('hidden', !(isRecycle && hasSelected));
     document.getElementById('batchClearBtn').classList.toggle('hidden', !(isRecycle && hasSelected));
-    // 批量按钮禁用状态同步
     document.getElementById('batchRestoreBtn').disabled = !hasSelected;
     document.getElementById('batchClearBtn').disabled = !hasSelected;
+    // 一键上传按钮
+    document.getElementById('uploadSelectedBtn').disabled = pendingFiles.length === 0;
 };
 
+// 页面全选/反选
 document.getElementById('selectAllBtn').onclick = () => {
     const ids = getRenderList().map(i=>i.id);
     selectedIds = selectedIds.length === ids.length ? [] : ids;
     render();
 };
 
-// ============== 修复：批量删除/恢复/永久删除 ==============
+// ============== 新增：文档一键选中上传 ==============
+// 缓存待上传文件
+document.getElementById('fileUpload').onchange = (e) => {
+    pendingFiles = Array.from(e.target.files);
+    updateBatchBtns();
+    alert(`已选中 ${pendingFiles.length} 个文件，点击「一键上传选中」上传`);
+};
+
+// 一键上传选中的本地文件
+document.getElementById('uploadSelectedBtn').onclick = () => {
+    if(pendingFiles.length === 0){
+        alert('暂无选中的待上传文件');
+        return;
+    }
+    if(isRecycle){
+        alert('回收站模式无法上传');
+        return;
+    }
+    handleFiles(pendingFiles);
+    pendingFiles = [];
+    updateBatchBtns();
+    alert('上传完成！');
+};
+
+// 一键全选当前分类文档
+document.getElementById('selectAllFileBtn').onclick = () => {
+    const allIds = getRenderList().map(item => item.id);
+    selectedIds = allIds;
+    render();
+};
+
+// ============== 删除/恢复/永久删除 ==============
 // 单文件删除
 const delOne = (id) => {
     const idx = fileList.findIndex(i=>i.id===id);
@@ -328,7 +432,7 @@ const batchDel = () => {
     saveToLocal(); render();
 };
 
-// 修复：单文件恢复
+// 单文件恢复
 const restoreOne = (id) => {
     const idx = recycleList.findIndex(i=>i.id===id);
     if(idx !== -1) {
@@ -337,32 +441,27 @@ const restoreOne = (id) => {
         saveToLocal(); render();
     }
 };
-// 修复：批量恢复
+// 批量恢复
 const batchRestore = () => {
     if(selectedIds.length === 0) return;
-    // 筛选要恢复的文件
     const restoreItems = recycleList.filter(item => selectedIds.includes(item.id));
-    // 从回收站移除
     recycleList = recycleList.filter(item => !selectedIds.includes(item.id));
-    // 加入主文件列表
     fileList.unshift(...restoreItems);
-    // 清空选择
     selectedIds = [];
     saveToLocal(); render();
 };
 
-// 修复：单文件永久删除
+// 单文件永久删除
 const delForever = (id) => {
     if(confirm('确认永久删除？不可恢复！')){
         recycleList = recycleList.filter(i=>i.id!==id);
         saveToLocal(); render();
     }
 };
-// 修复：批量永久删除
+// 批量永久删除
 const batchClear = () => {
     if(selectedIds.length === 0) return;
     if(confirm('确认批量永久删除？所有选中文件将无法恢复！')){
-        // 过滤掉选中的ID，保留未选中的
         recycleList = recycleList.filter(item => !selectedIds.includes(item.id));
         selectedIds = [];
         saveToLocal(); render();
@@ -435,63 +534,6 @@ function closePreview() {
     document.getElementById('previewContent').innerHTML = '';
 }
 
-// ============== AI调用（通义千问官方兼容+离线兜底）==============
-const offlineAI = (q) => {
-    return `📝 离线兜底回复
-你输入的内容：${q}
-──────────────
-API调用失败请检查：
-1. API Key是否正确复制填入
-2. 已领取qwen-turbo免费额度
-3  网络正常无代理
-──────────────
-获取Key教程：https://dashscope.console.aliyun.com/apiKeyManagement`;
-};
-
-document.getElementById('aiSearchBtn').onclick = async () => {
-    const q = document.getElementById('aiSearch').value.trim();
-    if(!q) return alert('请输入AI搜索内容');
-    const rBox = document.getElementById('aiResult');
-    const rContent = document.getElementById('aiContent');
-    rBox.classList.remove('hidden');
-    rContent.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>AI调用中...';
-
-    // 未填API Key直接走兜底
-    if(!AI_KEY || AI_KEY === 'sk-50efe641ed0a49ac9f3f5052e721c319'){
-        rContent.innerHTML = '❌ 未配置API Key，请先获取并填入代码中的AI_KEY变量\n'+offlineAI(q);
-        return;
-    }
-
-    try {
-        const resp = await fetch(AI_URL,{
-            method:'POST',
-            headers:{
-                'Content-Type':'application/json',
-                'Authorization':`Bearer ${AI_KEY}`
-            },
-            body:JSON.stringify({
-                "model":"qwen-turbo",
-                "input":{
-                    "messages":[
-                        {"role":"system","content":"你是文档管理助手，简洁回答用户问题，控制字数在300字内"},
-                        {"role":"user","content":q}
-                    ]
-                },
-                "parameters":{"temperature":0.4,"max_tokens":600}
-            })
-        });
-
-        const data = await resp.json();
-        if(data?.output?.text){
-            rContent.innerHTML = data.output.text;
-        } else {
-            throw new Error(data?.message || '无返回内容');
-        }
-    } catch (err) {
-        rContent.innerHTML = `❌ AI调用失败：${err.message}\n──────────────\n${offlineAI(q)}`;
-    }
-};
-
 // ============== 上传/拖拽/粘贴 ==============
 const handleFiles = (files) => {
     if(isRecycle) return;
@@ -505,7 +547,6 @@ const handleFiles = (files) => {
     saveToLocal(); render();
 };
 
-document.getElementById('fileUpload').onchange = (e) => handleFiles(e.target.files);
 document.body.ondragover = (e) => e.preventDefault();
 document.body.ondrop = (e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); };
 document.onpaste = (e) => {
@@ -517,6 +558,8 @@ document.onpaste = (e) => {
 window.onload = () => {
     initMusic();
     render();
+    renderMusicList();
+    updateBatchBtns();
 };
 </script>
 </body>
